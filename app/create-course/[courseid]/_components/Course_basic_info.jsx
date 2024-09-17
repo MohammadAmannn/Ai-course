@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
+import Link from 'next/link';
 import React from 'react';
 import { BsPuzzle } from "react-icons/bs";
 
@@ -15,9 +16,11 @@ function CourseBasic({ course }) {
               <BsPuzzle /> {course?.category}
             </h2>
             {/* Neon border effect button */}
+            <Link href={'/course/'+course?.courseId+'/start'}>
             <Button className="w-full mt-5 bg-gradient-to-r from-gray-300 to-gray-500 text-black font-bold py-2 px-4 rounded-md transition-all duration-300 ease-in-out">
   Start
 </Button>
+</Link>
 
           </div>
         </div>

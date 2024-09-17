@@ -18,7 +18,7 @@ function _AddCourse() {
           Create new course with AI,Share with friends and Earn a coin{" "}
         </p>
       </div>
-      <Link href={"/create-course"}>
+      <Link href="/create-course">
         <Button className="bg-blue-800 text-white rounded-lg">
           {" "}
           Create AI Course

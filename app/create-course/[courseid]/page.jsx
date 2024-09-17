@@ -1,6 +1,6 @@
 "use client";
 import { db } from "@/configs/db";
-import { CourseList } from "@/configs/schema";
+import { Chapters, CourseList } from "@/configs/schema";
 import { useUser } from "@clerk/nextjs";
 import { and, eq } from "drizzle-orm";
 import React, { useEffect, useState } from "react";
@@ -11,14 +11,17 @@ import { Button } from "@/components/ui/button";
 import { GenerateChapter_AI } from "@/configs/Ai_Model";
 import LoadingDialog from "../Loading";
 import { toast } from "sonner";
+import { getVideos } from "@/configs/service";
+import { useRouter } from "next/navigation";
 
 function CourseLayout({ params }) {
   // Get the authenticated user
   const { user } = useUser();
-  
+  const router = useRouter();
+
   // State to store the course data
   const [courses, setCourses] = React.useState(null);
-  const [Loading,setLoding]=useState(false)
+  const [Loading, setLoding] = useState(false);
 
   // Fetch the course details when params and user are available
   useEffect(() => {
@@ -36,51 +39,69 @@ function CourseLayout({ params }) {
           eq(CourseList?.createdBy, user?.primaryEmailAddress?.emailAddress)
         )
       );
-    
+
     // Store the course in the state
     setCourses(result[0]);
+
     console.log(result);
   };
 
   // Function to dynamically generate the AI prompt for each chapter
-  const GenerateChapter = () => {
-    setLoding(true)
+  const GenerateChapter = async () => {
+    setLoding(true);
     if (!courses || !courses.courseOutput?.chapters) return;
 
-    // Loop through each chapter in the course
-    courses.courseOutput.chapters.forEach(async(chapter, index) => {
-      const PROMPT = `Explain the concept in detail on topic: ${courses?.name}, chapter ${index + 1}: ${chapter.name}. ` +
-        "Provide the explanation in JSON format with list of array with fields like title, explanation (detailed), and code example (code field in <precode> format) if applicable.";
+    for (let index = 0; index < courses.courseOutput.chapters.length; index++) {
+      const chapter = courses.courseOutput.chapters[index];
+      const PROMPT = `Explain the concept in detail on topic: ${
+        courses?.name
+      }, chapter ${index + 1}: ${
+        chapter.name
+      }. Provide the explanation in JSON format with a list of array with fields like title, explanation (detailed), and code example (code field in <precode> format) if applicable.`;
 
-      console.log(PROMPT);
-      // You can make the API call here with the generated prompt to the AI service
-      if (index<3) {
-        try {
-          const result=await GenerateChapter_AI.sendMessage (PROMPT)
-          console.log(result)
-          console.log(result?.response?.text())
-          setLoding(false)
-          toast("Hurray Course Is Ready")
-        //Genrate Video URL
+      try {
+        const [aiResult, videoResponse] = await Promise.all([
+          GenerateChapter_AI.sendMessage(PROMPT),
+          getVideos(`${courses?.name}: ${chapter?.name}`),
+        ]);
 
-          
-        } catch (error) {
-          setLoding(false)
-          console.error(error);
-          
-        }
-        
+        const content = JSON.parse(await aiResult.response.text());
+        const videoID = videoResponse[0]?.videoId || "";
+        const thumbnail = videoResponse[0]?.thumbnail || ""; // Extract the thumbnail
+
+        // Insert chapter details into the database, including thumbnail
+        // Insert the chapter data into the database after both tasks are complete
+        await db.insert(Chapters).values({
+          chapterId: index + 1, // Assuming chapterId is the index in this case
+          courseId: courses?.courseId,
+          content: content,
+          videoId: videoID, // This should now be populated
+          thumbnail: videoResponse[0]?.thumbnail, // Add the thumbnail here
+        });
+
+        console.log(`Chapter ${index + 1} saved successfully`);
+      } catch (error) {
+        console.error(`Error saving chapter ${index + 1}:`, error);
+        toast.error(`Error saving chapter ${index + 1}`);
       }
-    });
+    }
+
+    setLoding(false);
+    toast.success("Course chapters generated and saved successfully!");
+    router.replace(`/create-course/${courses?.courseId}/finish`);
   };
 
   return (
     <div className="mt-10 px-7 md:px-20 lg:px-44">
       <h2 className="font-bold text-center text-2xl">Course Layout</h2>
-      <LoadingDialog loading={Loading}/>
+      <LoadingDialog loading={Loading} />
 
       {/* Display course basic information */}
-      {courses ? <CourseBasic course={courses} /> : <p>Loading course details...</p>}
+      {courses ? (
+        <CourseBasic course={courses} />
+      ) : (
+        <p>Loading course details...</p>
+      )}
 
       {/* Display course details */}
       {courses && <CourseDetails course={courses} />}
